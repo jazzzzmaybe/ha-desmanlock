@@ -103,7 +103,10 @@ class DesmanBluetoothLock:
             self._lock.get("lockType") or self._detail.get("type"),
         )
         client = self._client
-        if client is not None and client.is_connected:
+        if client is not None and not client.is_connected:
+            self._client = None
+            client = None
+        if client is not None:
             _LOGGER.debug("Reusing persistent connection to Desman lock %s", lock_mac)
         elif ble_device is None and self._hass is not None:
             ble_device = bluetooth.async_ble_device_from_address(
@@ -403,9 +406,7 @@ class DesmanBluetoothLock:
                     WRITE_CHARACTERISTIC, chunk, response=True
                 )
             return await asyncio.wait_for(response, RESPONSE_TIMEOUT)
-        except TimeoutError as err:
-            raise HomeAssistantError("Desman lock did not answer the Bluetooth command") from err
-        except Exception:
+        except Exception as err:
             if self._client is client:
                 self._client = None
             try:
@@ -413,6 +414,10 @@ class DesmanBluetoothLock:
                     await client.disconnect()
             except Exception:
                 _LOGGER.debug("Failed to disconnect Desman BLE client", exc_info=True)
+            if isinstance(err, TimeoutError):
+                raise HomeAssistantError(
+                    "Desman lock did not answer the Bluetooth command"
+                ) from err
             raise
         finally:
             try:
