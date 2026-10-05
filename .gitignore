@@ -7,3 +7,4 @@ bak/
 .desmanlock-token.json
 *.log
 scripts/
+tests/
