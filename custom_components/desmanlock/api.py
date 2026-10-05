@@ -77,7 +77,8 @@ class DesmanLockApiClient:
             "phoneType": "Android",
             "clientType": "ANDROID",
             "regionId": self.region_id,
-            "language": "zh-Hans",
+            # DsmServerManager.getCurrentLanguageTypeForServer uses "1" for zh-CN.
+            "language": "1",
             "requestId": str(uuid4()),
             "type": "",
         }
@@ -108,6 +109,12 @@ class DesmanLockApiClient:
             payload = response.json()
             if not isinstance(payload, dict):
                 raise DesmanLockApiError("Desman API returned an invalid payload")
+        except requests.HTTPError as err:
+            status = err.response.status_code if err.response is not None else None
+            if auth and status in (401, 403):
+                self.token = None
+                raise DesmanLockAuthError("Desman API login has expired") from err
+            raise DesmanLockApiError(f"Desman API returned HTTP {status}") from err
         except requests.RequestException as err:
             raise DesmanLockApiError(
                 f"Desman API request failed: {type(err).__name__}"
@@ -154,7 +161,8 @@ class DesmanLockApiClient:
         )
         if not data:
             raise DesmanLockAuthError("Login response does not contain token")
-        token = data[0].get("token") if isinstance(data, list) else data.get("token")
+        account = data[0] if isinstance(data, list) and data else data
+        token = account.get("token") if isinstance(account, dict) else None
         if not token:
             raise DesmanLockAuthError("Login response does not contain token")
         self.token = token
@@ -809,7 +817,9 @@ class DesmanLockApiClient:
         )
         if isinstance(data, list):
             data = data[0] if data else {}
-        allowed = bool(data.get("flag")) if isinstance(data, dict) else bool(data)
+        # DataFlag.flag is a nullable Boolean in the decoded app; fail closed
+        # when the server returns a missing or malformed preflight response.
+        allowed = isinstance(data, dict) and data.get("flag") is True
         _LOGGER.debug(
             "Desman phone unlock preflight: lock_id=%s allowed=%s", lock_id, allowed
         )
