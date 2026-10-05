@@ -23,7 +23,7 @@ from .const import (
 )
 from .coordinator import DesmanLockDataUpdateCoordinator
 from .entity import DesmanLockEntity, entity_identity, entity_unique_id
-from .helpers import AUTO_LOCK_TEXT, latest_open_user
+from .helpers import AUTO_LOCK_TEXT, latest_open_time_record, latest_open_user
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class DesmanCloudLock(DesmanLockEntity, LockEntity):
     @property
     def is_locked(self) -> bool | None:
         """Return true if the lock is locked."""
-        last_open = self.last_open_data
+        last_open = latest_open_time_record(self.coordinator.data.get("records"))
         log_type = last_open.get("logType")
         content = last_open.get("content")
         if log_type == AUTO_LOCK_TEXT or content == AUTO_LOCK_TEXT:

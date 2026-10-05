@@ -74,18 +74,26 @@ class DesmanLockDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 raise
             except DesmanLockApiError as err:
                 _LOGGER.debug("Failed to fetch lock battery curve: %s", err)
-            open_records = await self.api.async_open_door_records(
-                lock_id,
-                record_type=LOG_TYPE_OPEN_DOOR,
-            )
-            alarm_records = await self.api.async_open_door_records(
-                lock_id,
-                record_type=LOG_TYPE_ALARM,
-            )
-            action_records = await self.api.async_open_door_records(
-                lock_id,
-                record_type=LOG_TYPE_ACTION,
-            )
+            for record_type, previous_key in (
+                (LOG_TYPE_OPEN_DOOR, "records"),
+                (LOG_TYPE_ALARM, "alarm_records"),
+                (LOG_TYPE_ACTION, "action_records"),
+            ):
+                try:
+                    records = await self.api.async_open_door_records(
+                        lock_id, record_type=record_type
+                    )
+                except DesmanLockAuthError:
+                    raise
+                except DesmanLockApiError as err:
+                    _LOGGER.debug("Failed to fetch record type %s: %s", record_type, err)
+                    records = previous_data.get(previous_key) or []
+                if record_type == LOG_TYPE_OPEN_DOOR:
+                    open_records = records
+                elif record_type == LOG_TYPE_ALARM:
+                    alarm_records = records
+                else:
+                    action_records = records
             detail = _merge_current_with_previous(
                 detail,
                 previous_data.get("detail") or {},
@@ -116,7 +124,9 @@ class DesmanLockDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "detail": detail,
                 "detail_config": detail_config,
                 "battery_curve": battery_curve,
-                "records": open_records or previous_data.get("records") or [],
+                "records": open_records,
+                "alarm_records": alarm_records,
+                "action_records": action_records,
                 "last_open": last_open,
                 "last_alarm": last_alarm,
                 "last_action": last_action,
